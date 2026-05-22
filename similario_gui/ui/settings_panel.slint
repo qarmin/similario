@@ -1,0 +1,249 @@
+import { CheckBox } from "std-widgets.slint";
+import { Themes } from "colors.slint";
+import { LabeledSlider } from "labeled_slider.slint";
+
+export component SettingsPanel inherits Rectangle {
+    in-out property <float> cfg-tolerance;
+    in-out property <float> cfg-duration-tolerance-pct;
+    in-out property <float> cfg-min-matching-windows;
+    in-out property <float> cfg-subclip-min-match;
+    in-out property <int> cfg-window-count;
+    in-out property <int> cfg-skip-secs;
+    in-out property <bool> cfg-cropdetect;
+    in-out property <bool> cfg-audio-fingerprint;
+    in-out property <float> cfg-audio-max-difference;
+    in-out property <float> cfg-audio-min-segment-duration;
+
+    background: Themes.current.panel-bg;
+    VerticalLayout {
+        padding-bottom: 10px;
+        // Mode selector - tab-like buttons at top
+        Rectangle {
+            height: 36px;
+            background: Themes.current.panel-tabs-bg;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 2px;
+
+                Rectangle {
+                    width: 156px;
+                    border-radius: 6px;
+                    background: !root.cfg-audio-fingerprint ? Themes.current.panel-tab-active-bg : Themes.current.panel-tab-inactive-bg;
+
+                    TouchArea {
+                        clicked => { root.cfg-audio-fingerprint = false; }
+                    }
+
+                    HorizontalLayout {
+                        padding: 6px;
+                        spacing: 6px;
+
+                        Rectangle {
+                            width: 10px;
+                            height: 10px;
+                            border-radius: 5px;
+                            y: (parent.height - self.height) / 2;
+                            background: !root.cfg-audio-fingerprint ? Themes.current.group-similar : Themes.current.dot-inactive;
+                        }
+
+                        Text {
+                            text: "Visual content";
+                            color: !root.cfg-audio-fingerprint ? Themes.current.text-primary : Themes.current.text-muted;
+                            font-size: 11px;
+                            font-weight: !root.cfg-audio-fingerprint ? 700 : 400;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: 180px;
+                    border-radius: 6px;
+                    background: root.cfg-audio-fingerprint ? Themes.current.panel-tab-active-bg : Themes.current.panel-tab-inactive-bg;
+
+                    TouchArea {
+                        clicked => { root.cfg-audio-fingerprint = true; }
+                    }
+
+                    HorizontalLayout {
+                        padding: 6px;
+                        spacing: 6px;
+
+                        Rectangle {
+                            width: 10px;
+                            height: 10px;
+                            border-radius: 5px;
+                            y: (parent.height - self.height) / 2;
+                            background: root.cfg-audio-fingerprint ? Themes.current.group-same-content : Themes.current.dot-inactive;
+                        }
+
+                        Text {
+                            text: "Audio fingerprint";
+                            color: root.cfg-audio-fingerprint ? Themes.current.text-primary : Themes.current.text-muted;
+                            font-size: 11px;
+                            font-weight: root.cfg-audio-fingerprint ? 700 : 400;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+            }
+        }
+
+        // Settings body - Visual mode
+        if !root.cfg-audio-fingerprint : Rectangle {
+            height: 135px;
+
+            Rectangle {
+                x: 12px;
+                y: 12px;
+                width: (parent.width - 36px) / 2;
+
+                VerticalLayout {
+                    spacing: 6px;
+                    width: parent.width;
+
+                    Text {
+                        text: "Comparison";
+                        color: Themes.current.text-primary;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    LabeledSlider {
+                        label: "Tolerance";
+                        minimum: 0.05;
+                        maximum: 0.50;
+                        value <=> root.cfg-tolerance;
+                        suffix: "%";
+                    }
+
+                    LabeledSlider {
+                        label: "Duration tolerance";
+                        minimum: 5;
+                        maximum: 50;
+                        value <=> root.cfg-duration-tolerance-pct;
+                        suffix: "num";
+                    }
+
+                    LabeledSlider {
+                        label: "Min matching windows";
+                        minimum: 0.3;
+                        maximum: 1.0;
+                        value <=> root.cfg-min-matching-windows;
+                        suffix: "%";
+                    }
+
+                    LabeledSlider {
+                        label: "SubClip min match";
+                        minimum: 0.2;
+                        maximum: 1.0;
+                        value <=> root.cfg-subclip-min-match;
+                        suffix: "%";
+                    }
+
+                    Rectangle {
+                        vertical-stretch: 1;
+                    }
+                }
+            }
+
+            Rectangle {
+                x: parent.width / 2 + 6px;
+                y: 12px;
+                width: (parent.width - 36px) / 2;
+
+                VerticalLayout {
+                    spacing: 6px;
+                    width: parent.width;
+
+                    Text {
+                        text: "Signature";
+                        color: Themes.current.text-primary;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    LabeledSlider {
+                        label: "Window count";
+                        minimum: 2;
+                        maximum: 15;
+                        value: root.cfg-window-count;
+                        changed value => { root.cfg-window-count = Math.round(self.value); }
+                    }
+
+                    LabeledSlider {
+                        label: "Skip start (sec)";
+                        minimum: 0;
+                        maximum: 60;
+                        value: root.cfg-skip-secs;
+                        changed value => { root.cfg-skip-secs = Math.round(self.value); }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+
+                        Text {
+                            text: "Cropdetect";
+                            color: Themes.current.text-secondary;
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            width: 100px;
+                        }
+
+                        CheckBox {
+                            checked <=> root.cfg-cropdetect;
+                        }
+                    }
+
+                    Rectangle {
+                        vertical-stretch: 1;
+                    }
+                }
+            }
+        }
+
+        // Settings body - Audio mode
+        if root.cfg-audio-fingerprint : Rectangle {
+            height: 105px;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 6px;
+
+                Text {
+                    text: "Audio matching";
+                    color: Themes.current.text-primary;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+
+                LabeledSlider {
+                    label: "Max difference";
+                    minimum: 0.5;
+                    maximum: 10.0;
+                    value <=> root.cfg-audio-max-difference;
+                }
+
+                LabeledSlider {
+                    label: "Min segment (sec)";
+                    minimum: 1.0;
+                    maximum: 180.0;
+                    value <=> root.cfg-audio-min-segment-duration;
+                }
+
+                LabeledSlider {
+                    label: "Duration tolerance";
+                    minimum: 5;
+                    maximum: 50;
+                    value <=> root.cfg-duration-tolerance-pct;
+                    suffix: "num";
+                }
+            }
+        }
+    }
+}

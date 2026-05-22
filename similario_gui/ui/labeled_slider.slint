@@ -1,0 +1,36 @@
+import { Slider } from "std-widgets.slint";
+import { Themes } from "colors.slint";
+
+export component LabeledSlider inherits HorizontalLayout {
+    in property <string> label;
+    in property <float> minimum;
+    in property <float> maximum;
+    in-out property <float> value;
+    in property <string> suffix: "";
+
+    spacing: 8px;
+
+    Text {
+        text: root.label;
+        color: Themes.current.text-secondary;
+        font-size: 11px;
+        vertical-alignment: center;
+        width: 130px;
+    }
+
+    Slider {
+        horizontal-stretch: 1;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.value;
+    }
+
+    Text {
+        text: root.suffix == "%" ? "\{Math.round(root.value * 100)}%" : "\{Math.round(root.value)}";
+        color: Themes.current.text-primary;
+        font-size: 11px;
+        vertical-alignment: center;
+        width: 50px;
+        horizontal-alignment: right;
+    }
+}

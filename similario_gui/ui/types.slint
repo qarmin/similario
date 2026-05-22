@@ -1,0 +1,26 @@
+// Shared enums and data structures used across the UI.
+
+export enum GroupKind { identical, same-content, sub-clip, similar }
+
+// Per-row quality marker within a group:
+//   best  - highest resolution + codec rank (the one to keep)
+//   worse - lower quality (deletion candidate)
+//   unknown - header rows, single-file groups, or missing metadata
+export enum QualityTier { unknown, best, worse }
+
+export struct FileRow {
+    checked: bool,
+    is-header: bool,
+    thumbnail: image,
+    group-kind: GroupKind,
+    quality-tier: QualityTier,
+    name: string,
+    path: string,
+    size: string,
+    dimensions: string,
+    duration: string,
+    bitrate: string,
+    fps: string,
+    codec: string,
+    mod-date: string,
+}

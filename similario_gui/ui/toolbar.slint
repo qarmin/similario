@@ -1,0 +1,64 @@
+import { Button, LineEdit } from "std-widgets.slint";
+import { Themes, Settings } from "colors.slint";
+
+export component Toolbar inherits Rectangle {
+    in property <bool> scanning;
+    in property <bool> settings-visible;
+    in-out property <string> dir-path;
+
+    callback scan-clicked(string);
+    callback stop-clicked();
+    callback stop-and-compare-clicked();
+    callback settings-toggled();
+
+    height: 56px;
+    background: Themes.current.toolbar-bg;
+
+    HorizontalLayout {
+        padding: 8px;
+        spacing: 8px;
+
+        Text {
+            text: "Directory:";
+            color: Themes.current.text-body;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+
+        dir-input := LineEdit {
+            horizontal-stretch: 1;
+            placeholder-text: "/path/to/videos";
+            text <=> root.dir-path;
+        }
+
+        Button {
+            text: root.scanning ? "Scanning..." : "Scan";
+            enabled: !root.scanning;
+            clicked => { root.scan-clicked(dir-input.text); }
+            primary: true;
+        }
+
+        Button {
+            text: "Stop";
+            enabled: root.scanning;
+            clicked => { root.stop-clicked(); }
+        }
+
+        Button {
+            text: "Stop & Compare";
+            enabled: root.scanning;
+            clicked => { root.stop-and-compare-clicked(); }
+        }
+
+        Button {
+            text: root.settings-visible ? "Settings ▲" : "Settings ▼";
+            clicked => { root.settings-toggled(); }
+            checkable: true;
+        }
+
+        Button {
+            text: Settings.dark-theme ? "☀ Light" : "☾ Dark";
+            clicked => { Settings.dark-theme = !Settings.dark-theme; }
+        }
+    }
+}

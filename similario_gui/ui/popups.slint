@@ -1,0 +1,113 @@
+import { Button } from "std-widgets.slint";
+import { Themes } from "colors.slint";
+
+component ConfirmPopupBody inherits Rectangle {
+    in property <string> title-text;
+    in property <string> body-text;
+    in property <string> ok-text;
+    callback ok-clicked();
+    callback cancel-clicked();
+
+    width: 350px;
+    height: 150px;
+    border-radius: 10px;
+    border-color: Themes.current.popup-border;
+    border-width: 2px;
+    background: Themes.current.popup-bg;
+    clip: true;
+
+    VerticalLayout {
+        Rectangle {
+            height: 30px;
+            background: Themes.current.popup-header-bg;
+            Text {
+                text: title-text;
+                color: Themes.current.text-primary;
+                font-size: 13px;
+                font-weight: 700;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: body-text;
+                color: Themes.current.text-body;
+                font-size: 12px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+
+        HorizontalLayout {
+            padding: 10px;
+            Button {
+                text: ok-text;
+                primary: true;
+                clicked => { root.ok-clicked(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "Cancel";
+                clicked => { root.cancel-clicked(); }
+            }
+        }
+    }
+}
+
+component OverlayPopup inherits Rectangle {
+    in property <string> title-text;
+    in property <string> body-text;
+    in property <string> ok-text;
+    callback ok-clicked();
+
+    out property <length> popup-width: 350px;
+    out property <length> popup-height: 150px;
+    in-out property <bool> popup-visible: false;
+
+    visible: popup-visible;
+    width: 100%;
+    height: 100%;
+    background: #00000099;
+
+    // Backdrop: swallows all clicks/scrolls so nothing underneath reacts.
+    TouchArea {
+        // Click outside the popup body cancels.
+        clicked => { root.popup-visible = false; }
+        scroll-event(event) => { accept }
+    }
+
+    body := ConfirmPopupBody {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        title-text: root.title-text;
+        body-text: root.body-text;
+        ok-text: root.ok-text;
+        ok-clicked => {
+            root.popup-visible = false;
+            root.ok-clicked();
+        }
+        cancel-clicked => { root.popup-visible = false; }
+    }
+}
+
+export component DeletePopup inherits OverlayPopup {
+    title-text: "Permanently delete";
+    ok-text: "Delete";
+    callback delete-confirmed();
+    ok-clicked => { root.delete-confirmed(); }
+
+    public function show-popup() { root.popup-visible = true; }
+}
+
+export component TrashPopup inherits OverlayPopup {
+    title-text: "Move to trash";
+    ok-text: "Trash";
+    callback trash-confirmed();
+    ok-clicked => { root.trash-confirmed(); }
+
+    public function show-popup() { root.popup-visible = true; }
+}

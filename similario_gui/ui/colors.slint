@@ -1,0 +1,125 @@
+// Color palette and theme support.
+// All colors used in the UI live here; switch via Settings.dark-theme.
+
+export struct Theme {
+    // Surfaces
+    window-bg: color,
+    toolbar-bg: color,
+    panel-bg: color,
+    panel-tabs-bg: color,
+    panel-tab-active-bg: color,
+    panel-tab-inactive-bg: color,
+    progress-bg: color,
+    column-header-bg: color,
+    row-bg: color,
+    row-hover-bg: color,
+    row-selected-bg: color,
+    row-header-bg: color,
+    popup-bg: color,
+    popup-header-bg: color,
+    popup-border: color,
+    thumbnail-bg: color,
+
+    // Text
+    text-strong: color,
+    text-primary: color,
+    text-body: color,
+    text-secondary: color,
+    text-muted: color,
+    text-dim: color,
+
+    // Accents / group kinds
+    group-identical: color,
+    group-same-content: color,
+    group-sub-clip: color,
+    group-similar: color,
+    dot-inactive: color,
+
+    // Per-row quality tier markers
+    quality-best: color,
+    quality-best-text: color,
+    quality-worse: color,
+    quality-worse-text: color,
+}
+
+export global Settings {
+    in-out property <bool> dark-theme: true;
+}
+
+export global Themes {
+    out property <Theme> dark: {
+        window-bg: #1e1e2e,
+        toolbar-bg: #2a2a3a,
+        panel-bg: #222233,
+        panel-tabs-bg: #1a1a2a,
+        panel-tab-active-bg: #333350,
+        panel-tab-inactive-bg: #222233,
+        progress-bg: #252535,
+        column-header-bg: #252540,
+        row-bg: #1e1e2e,
+        row-hover-bg: #252535,
+        row-selected-bg: #3a4a6a,
+        row-header-bg: #2a2a3a,
+        popup-bg: #2a2a3a,
+        popup-header-bg: #3a3a4a,
+        popup-border: #555566,
+        thumbnail-bg: #00000000,
+
+        text-strong: #ffffff,
+        text-primary: #e0e0ff,
+        text-body: #ccccdd,
+        text-secondary: #aaaacc,
+        text-muted: #888899,
+        text-dim: #666677,
+
+        group-identical: #ff6b6b,
+        group-same-content: #ffa94d,
+        group-sub-clip: #69db7c,
+        group-similar: #74c0fc,
+        dot-inactive: #555566,
+
+        quality-best: #51cf66,
+        quality-best-text: #8ce99a,
+        quality-worse: #ff6b6b,
+        quality-worse-text: #ffa8a8,
+    };
+
+    out property <Theme> light: {
+        window-bg: #f3f3f7,
+        toolbar-bg: #e2e2ea,
+        panel-bg: #ebebf2,
+        panel-tabs-bg: #dadae4,
+        panel-tab-active-bg: #c6c6d6,
+        panel-tab-inactive-bg: #ebebf2,
+        progress-bg: #dadae4,
+        column-header-bg: #ced0e0,
+        row-bg: #ffffff,
+        row-hover-bg: #ececf3,
+        row-selected-bg: #b9cdee,
+        row-header-bg: #e2e2ea,
+        popup-bg: #ffffff,
+        popup-header-bg: #d6d6e0,
+        popup-border: #b2b2c0,
+        thumbnail-bg: #00000000,
+
+        text-strong: #0a0a14,
+        text-primary: #1a1a2a,
+        text-body: #333344,
+        text-secondary: #555566,
+        text-muted: #777788,
+        text-dim: #999aa6,
+
+        group-identical: #d23030,
+        group-same-content: #c46a17,
+        group-sub-clip: #2e8b54,
+        group-similar: #2b6cb0,
+        dot-inactive: #b0b0c0,
+
+        quality-best: #2e8b54,
+        quality-best-text: #1e6b3e,
+        quality-worse: #d23030,
+        quality-worse-text: #a51d1d,
+    };
+
+    out property <Theme> current: Settings.dark-theme ? root.dark : root.light;
+}

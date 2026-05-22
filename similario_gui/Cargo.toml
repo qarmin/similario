@@ -1,0 +1,29 @@
+[package]
+name = "similario_gui"
+version = "0.1.0"
+authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>"]
+edition = "2024"
+rust-version = "1.94.1"
+description = "Slint frontend for Similario"
+license = "GPL-3.0-only"
+homepage = "https://github.com/qarmin/similario"
+repository = "https://github.com/qarmin/similario"
+build = "build.rs"
+
+[dependencies]
+similario_core = { path = "../similario_core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rayon = "1.10"
+log = "0.4"
+slint = { version = "1.9", default-features = false, features = ["std", "backend-winit", "renderer-femtovg", "renderer-software", "compat-1-2"] }
+handsome_logger = "0.9"
+chrono = "0.4"
+humansize = "2.1"
+trash = "5"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+slint-build = "1.9"

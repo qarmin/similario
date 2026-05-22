@@ -1,0 +1,33 @@
+[package]
+name = "similario_core"
+version = "0.1.0"
+authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>"]
+edition = "2024"
+rust-version = "1.94.1"
+description = "Library, that allows to find similar videos"
+license = "MIT"
+homepage = "https://github.com/qarmin/similario"
+repository = "https://github.com/qarmin/similario"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "=1"
+blake3 = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+ndarray = "0.17"
+rustdct = "0.7"
+bitvec = { version = "1", features = ["serde"] }
+hamming-bitwise-fast = "1.0"
+symphonia = { version = "0.6", features = ["all"] }
+rusty-chromaprint = "0.3"
+rayon = "1.10"
+thiserror = "2"
+filetime = "0.2"
+log = "0.4"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = "3"
