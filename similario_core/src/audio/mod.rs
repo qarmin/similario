@@ -77,10 +77,7 @@ fn compute_fingerprint_with_config(
             return Ok(None);
         }
 
-        let packet = match format.next_packet() {
-            Ok(Some(p)) => p,
-            Err(Error::IoError(_) | _) | Ok(None) => break,
-        };
+        let Ok(Some(packet)) = format.next_packet() else { break };
 
         if packet.track_id != track_id {
             continue;

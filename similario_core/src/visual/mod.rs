@@ -1,9 +1,12 @@
 pub(crate) mod cropdetect;
 mod dct;
 mod extract;
+mod watchdog;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use bitvec::array::BitArray;
 use bitvec::order::Lsb0;
@@ -29,6 +32,12 @@ pub const DEFAULT_WINDOW_SECS: f64 = 6.0;
 /// Frames per window (fed into 3D-DCT).
 pub const FRAMES_PER_WINDOW: usize = 16;
 
+/// Default per-call ffmpeg timeout policy values (see [`FfmpegTimeout`]).
+pub const DEFAULT_FFMPEG_TIMEOUT_BASE_SECS: f64 = 10.0;
+pub const DEFAULT_FFMPEG_TIMEOUT_FACTOR: f64 = 5.0;
+pub const DEFAULT_FFMPEG_TIMEOUT_MIN_SECS: f64 = 60.0;
+pub const DEFAULT_FFMPEG_TIMEOUT_MAX_SECS: f64 = 360.0;
+
 /// Threshold for classifying a frame as black (≥80% pixels ≤ 0x20).
 const BLACK_PIXEL_LIMIT: u8 = 0x20;
 const BLACK_FRAME_THRESHOLD: f64 = 0.80;
@@ -49,7 +58,7 @@ pub struct TemporalHash {
 }
 
 impl TemporalHash {
-    /// Hamming distance between two hashes (0–1000).
+    /// Hamming distance between two hashes (0-1000).
     pub fn hamming_distance(&self, other: &Self) -> u32 {
         hamming_bitwise_fast::hamming_bitwise_fast(self.bits.as_raw_slice(), other.bits.as_raw_slice()) as u32
     }
@@ -85,6 +94,46 @@ pub enum SignatureError {
     Metadata(#[from] crate::metadata::MetadataError),
 }
 
+/// Per-ffmpeg-call timeout policy used by the frame-extraction watchdog.
+///
+/// Each window's ffmpeg call is killed if it runs longer than
+/// `window_duration * factor + base_secs`, clamped to `[min_secs, max_secs]`.
+/// `-ss` before `-i` makes seeking near-instant, so decoding a window at
+/// `-threads 1` should rarely take more than a few times real-time; the
+/// floor/ceiling protect both very short and very long windows against a
+/// wedged ffmpeg.
+#[derive(Debug, Clone, Copy)]
+pub struct FfmpegTimeout {
+    /// Constant overhead added on top of the duration-scaled part.
+    pub base_secs: f64,
+    /// Multiplier applied to the window duration.
+    pub factor: f64,
+    /// Lower bound on the effective timeout.
+    pub min_secs: f64,
+    /// Upper bound on the effective timeout (the hard cancel-after-N-seconds cap).
+    pub max_secs: f64,
+}
+
+impl Default for FfmpegTimeout {
+    fn default() -> Self {
+        Self {
+            base_secs: DEFAULT_FFMPEG_TIMEOUT_BASE_SECS,
+            factor: DEFAULT_FFMPEG_TIMEOUT_FACTOR,
+            min_secs: DEFAULT_FFMPEG_TIMEOUT_MIN_SECS,
+            max_secs: DEFAULT_FFMPEG_TIMEOUT_MAX_SECS,
+        }
+    }
+}
+
+impl FfmpegTimeout {
+    /// Effective timeout for a window of `duration` seconds.
+    pub fn for_duration(&self, duration: f64) -> Duration {
+        let lo = self.min_secs.max(0.0);
+        let hi = self.max_secs.max(lo);
+        Duration::from_secs_f64((duration * self.factor + self.base_secs).clamp(lo, hi))
+    }
+}
+
 /// Configuration for building a visual signature.
 #[derive(Debug, Clone)]
 pub struct SignatureConfig {
@@ -98,6 +147,9 @@ pub struct SignatureConfig {
     pub cropdetect: bool,
     /// Whether to compute audio fingerprint (Chromaprint).
     pub audio_fingerprint: bool,
+    /// Per-ffmpeg-call timeout policy for the extraction watchdog. Does not
+    /// affect the computed hash, so it is intentionally excluded from the cache key.
+    pub ffmpeg_timeout: FfmpegTimeout,
 }
 
 impl Default for SignatureConfig {
@@ -108,6 +160,7 @@ impl Default for SignatureConfig {
             window_secs: DEFAULT_WINDOW_SECS,
             cropdetect: true,
             audio_fingerprint: false,
+            ffmpeg_timeout: FfmpegTimeout::default(),
         }
     }
 }
@@ -118,7 +171,11 @@ impl VideoSignature {
         clippy::indexing_slicing,
         reason = "i bounded by windows.len(), frames pre-allocated"
     )]
-    pub fn from_path(path: &Path, config: &SignatureConfig, stop_flag: &AtomicBool) -> Result<Self, SignatureError> {
+    pub fn from_path(
+        path: &Path,
+        config: &SignatureConfig,
+        stop_flag: &Arc<AtomicBool>,
+    ) -> Result<Self, SignatureError> {
         if stop_flag.load(Ordering::Relaxed) {
             return Err(SignatureError::FrameExtract(extract::FrameExtractError::Stopped));
         }
@@ -132,8 +189,14 @@ impl VideoSignature {
         let windows = compute_window_positions(meta.duration_secs, config);
 
         // 3. Extract frames via one ffmpeg process for all windows.
-        let all_frames =
-            extract::extract_frames_multi_window(path, &windows, FRAMES_PER_WINDOW, config.cropdetect, stop_flag)?;
+        let all_frames = extract::extract_frames_multi_window(
+            path,
+            &windows,
+            FRAMES_PER_WINDOW,
+            config.cropdetect,
+            config.ffmpeg_timeout,
+            stop_flag,
+        )?;
 
         // 4. Build one TemporalHash per window.
         let mut visual_hashes = Vec::with_capacity(windows.len());
@@ -236,6 +299,7 @@ mod tests {
             window_secs: 6.0,
             cropdetect: false,
             audio_fingerprint: false,
+            ..Default::default()
         };
         // 120s video: usable_start = min(15, 18) = 15, usable_end = 118
         let windows = compute_window_positions(120.0, &cfg);
@@ -256,6 +320,7 @@ mod tests {
             window_secs: 4.0,
             cropdetect: false,
             audio_fingerprint: false,
+            ..Default::default()
         };
         // Short 20s video: skip reduced to 3s (15% of 20s)
         let windows = compute_window_positions(20.0, &cfg);
@@ -276,6 +341,34 @@ mod tests {
         };
         assert_eq!(h.hamming_distance(&h), 0);
         assert_eq!(h.normalized_distance(&h), 0.0);
+    }
+
+    #[test]
+    fn ffmpeg_timeout_scales_and_clamps() {
+        let t = FfmpegTimeout {
+            base_secs: 10.0,
+            factor: 5.0,
+            min_secs: 20.0,
+            max_secs: 120.0,
+        };
+        // Below the floor: 1*5+10 = 15 -> clamped up to min.
+        assert_eq!(t.for_duration(1.0), Duration::from_secs(20));
+        // Within range: 6*5+10 = 40.
+        assert_eq!(t.for_duration(6.0), Duration::from_secs(40));
+        // Above the ceiling: 100*5+10 = 510 -> clamped down to max.
+        assert_eq!(t.for_duration(100.0), Duration::from_secs(120));
+    }
+
+    #[test]
+    fn ffmpeg_timeout_handles_inverted_bounds() {
+        // max < min should not panic; the floor wins.
+        let t = FfmpegTimeout {
+            base_secs: 0.0,
+            factor: 0.0,
+            min_secs: 30.0,
+            max_secs: 10.0,
+        };
+        assert_eq!(t.for_duration(5.0), Duration::from_secs(30));
     }
 
     #[test]

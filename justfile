@@ -30,7 +30,7 @@ fmt:
     cargo fmt --all
 
 fix:
-    grep -rlZ --include="*.rs" "─" . | xargs -0 sed -i 's/─//g' || true
+    grep -rl --null -F --include='*.rs' --include='*.slint' --include='*.md' --include='*.ftl' --exclude='AGENTS.md' --exclude='justfile' --exclude-dir='.git' --exclude-dir='target' -e '─' -e '–' -e '—' . | xargs -0 -r perl -CSD -i -pe 's/[\x{2500}\x{2013}\x{2014}]/-/g' || true
     cargo +nightly fmt --all
     cargo clippy --fix --allow-dirty --allow-staged --all-features --all-targets --workspace
     cargo +nightly fmt --all

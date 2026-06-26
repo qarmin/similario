@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
 use similario_core::compare::{CompareConfig, find_similar};
+use similario_core::visual::{DEFAULT_FFMPEG_TIMEOUT_MAX_SECS, DEFAULT_FFMPEG_TIMEOUT_MIN_SECS, FfmpegTimeout};
 use similario_core::{ScanOutcome, SignatureConfig, check_cache, collect_video_files, compute_signatures};
 
 #[derive(Parser)]
@@ -22,7 +23,7 @@ enum Command {
         #[arg(required = true)]
         dirs: Vec<PathBuf>,
 
-        /// Hamming tolerance (0.0–1.0). Default: 0.30.
+        /// Hamming tolerance (0.0-1.0). Default: 0.30.
         #[arg(long, default_value_t = 0.30)]
         tolerance: f32,
 
@@ -45,6 +46,14 @@ enum Command {
         /// Disable letterbox (black bar) detection and cropping.
         #[arg(long)]
         no_cropdetect: bool,
+
+        /// Minimum per-file ffmpeg timeout in seconds (floor for short windows).
+        #[arg(long, default_value_t = DEFAULT_FFMPEG_TIMEOUT_MIN_SECS)]
+        timeout_min: f64,
+
+        /// Maximum per-file ffmpeg timeout in seconds (hard cancel-after cap).
+        #[arg(long, default_value_t = DEFAULT_FFMPEG_TIMEOUT_MAX_SECS)]
+        timeout_max: f64,
     },
 
     /// Removes cached signatures older than the given number of days.
@@ -84,6 +93,8 @@ fn main() {
             skip,
             no_cache,
             no_cropdetect,
+            timeout_min,
+            timeout_max,
         } => {
             run_scan(
                 dirs,
@@ -93,6 +104,11 @@ fn main() {
                 skip,
                 no_cache,
                 no_cropdetect,
+                FfmpegTimeout {
+                    min_secs: timeout_min,
+                    max_secs: timeout_max,
+                    ..Default::default()
+                },
                 interrupted,
             );
         }
@@ -117,6 +133,7 @@ fn run_scan(
     skip_secs: f64,
     no_cache: bool,
     no_cropdetect: bool,
+    ffmpeg_timeout: FfmpegTimeout,
     interrupted: Arc<AtomicBool>,
 ) {
     // 1. Collect files.
@@ -145,6 +162,7 @@ fn run_scan(
         window_secs: 6.0,
         cropdetect: !no_cropdetect,
         audio_fingerprint: false,
+        ffmpeg_timeout,
     };
 
     let use_cache = !no_cache;

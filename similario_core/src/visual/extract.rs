@@ -7,11 +7,13 @@ use std::io::Read;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use image::GrayImage;
 use thiserror::Error;
 
-use super::{DCT_SIZE, cropdetect, is_black_frame};
+use super::watchdog::{self, KillReason};
+use super::{DCT_SIZE, FfmpegTimeout, cropdetect, is_black_frame};
 
 #[derive(Debug, Error)]
 pub enum FrameExtractError {
@@ -25,6 +27,8 @@ pub enum FrameExtractError {
     InsufficientFrames { window: usize, got: usize },
     #[error("Extraction stopped")]
     Stopped,
+    #[error("ffmpeg timed out after {seconds}s - file likely corrupt or stuck")]
+    TimedOut { seconds: u64 },
 }
 
 const FRAME_W: u32 = DCT_SIZE as u32;
@@ -42,14 +46,15 @@ pub fn extract_frames_multi_window(
     windows: &[(f64, f64)],
     frames_per_window: usize,
     cropdetect_enabled: bool,
-    stop_flag: &AtomicBool,
+    timeout: FfmpegTimeout,
+    stop_flag: &Arc<AtomicBool>,
 ) -> Result<Vec<GrayImage>, FrameExtractError> {
     let n_windows = windows.len();
     let total_frames = n_windows * frames_per_window;
 
     // Optional letterbox detection - pre-scan a few frames at moderate resolution.
     let crop_filter = if cropdetect_enabled {
-        detect_crop(path, windows, stop_flag)?
+        detect_crop(path, windows, timeout, stop_flag)?
     } else {
         String::new()
     };
@@ -66,7 +71,7 @@ pub fn extract_frames_multi_window(
 
         let filter = format!("fps={fps:.4},{crop_filter}scale={FRAME_W}:{FRAME_H}:flags=bilinear,format=gray");
 
-        let raw = run_ffmpeg_seeked(path, *start, duration, &filter, frames_per_window, stop_flag)?;
+        let raw = run_ffmpeg_seeked(path, *start, duration, &filter, frames_per_window, timeout, stop_flag)?;
 
         for chunk in raw.chunks(FRAME_BYTES) {
             if chunk.len() < FRAME_BYTES {
@@ -97,7 +102,12 @@ const PRESCAN_H: u32 = 120;
 /// detection on them. Returns an ffmpeg `crop=…,` filter fragment
 /// (with trailing comma) or an empty string if no letterbox was found.
 #[expect(clippy::indexing_slicing, reason = "windows.len()/2 valid when non-empty")]
-fn detect_crop(path: &Path, windows: &[(f64, f64)], stop_flag: &AtomicBool) -> Result<String, FrameExtractError> {
+fn detect_crop(
+    path: &Path,
+    windows: &[(f64, f64)],
+    timeout: FfmpegTimeout,
+    stop_flag: &Arc<AtomicBool>,
+) -> Result<String, FrameExtractError> {
     let (start, end) = windows[windows.len() / 2];
     let duration = end - start;
     let prescan_frames: usize = 8;
@@ -105,7 +115,7 @@ fn detect_crop(path: &Path, windows: &[(f64, f64)], stop_flag: &AtomicBool) -> R
 
     let filter = format!("fps={fps:.4},scale={PRESCAN_W}:{PRESCAN_H}:flags=bilinear,format=gray");
 
-    let raw = run_ffmpeg_seeked(path, start, duration, &filter, prescan_frames, stop_flag)?;
+    let raw = run_ffmpeg_seeked(path, start, duration, &filter, prescan_frames, timeout, stop_flag)?;
     let prescan_bytes = (PRESCAN_W * PRESCAN_H) as usize;
 
     let frames: Vec<GrayImage> = raw
@@ -130,17 +140,18 @@ fn detect_crop(path: &Path, windows: &[(f64, f64)], stop_flag: &AtomicBool) -> R
     Ok(format!("crop=iw*{cw:.4}:ih*{ch:.4}:iw*{cx:.4}:ih*{cy:.4},",))
 }
 
-/// Spawns ffmpeg with `-ss` BEFORE `-i` for fast keyframe seek, then reads
-/// output with interleaved stop_flag checks.
+/// Spawns ffmpeg with `-ss` BEFORE `-i` for fast keyframe seek, registers it
+/// with the global watchdog, then reads its output.
 fn run_ffmpeg_seeked(
     path: &Path,
     seek_secs: f64,
     duration: f64,
     vf_filter: &str,
     max_frames: usize,
-    stop_flag: &AtomicBool,
+    timeout: FfmpegTimeout,
+    stop_flag: &Arc<AtomicBool>,
 ) -> Result<Vec<u8>, FrameExtractError> {
-    let mut child = Command::new("ffmpeg")
+    let child = Command::new("ffmpeg")
         .args(["-hide_banner", "-loglevel", "error", "-threads", "1"])
         // Fast seek BEFORE -i: jumps to nearest keyframe, near-instant.
         .arg("-ss")
@@ -171,42 +182,53 @@ fn run_ffmpeg_seeked(
             }
         })?;
 
-    read_stdout_checked(&mut child, max_frames * FRAME_BYTES, stop_flag)
+    let timeout = timeout.for_duration(duration);
+    let watched = watchdog::watch(child, timeout, stop_flag);
+
+    let result = read_stdout_checked(watched.child(), max_frames * FRAME_BYTES);
+
+    match watched.outcome() {
+        Some(KillReason::Stopped) => Err(FrameExtractError::Stopped),
+        Some(KillReason::TimedOut) => {
+            log::warn!(
+                "ffmpeg timed out after {}s extracting frames from {} (seek={seek_secs:.3}s, dur={duration:.3}s) - \
+                 file is likely corrupt or got the process stuck",
+                timeout.as_secs(),
+                path.display(),
+            );
+            Err(FrameExtractError::TimedOut {
+                seconds: timeout.as_secs(),
+            })
+        }
+        None => result,
+    }
 }
 
-/// Reads child stdout with periodic stop_flag checks. Kills child on stop.
-#[expect(
-    clippy::unwrap_used,
-    reason = "stdout always available after spawn with Stdio::piped"
-)]
+/// Reads child stdout to EOF. Cancellation/timeout is handled externally by
+/// the global watchdog (see `watchdog::watch`), which kills the child -
+/// closing the pipe and unblocking the read - rather than this loop polling
+/// a flag itself.
 #[expect(clippy::indexing_slicing, reason = "buf[..n] bounded by read return value")]
-fn read_stdout_checked(
-    child: &mut Child,
-    capacity: usize,
-    stop_flag: &AtomicBool,
-) -> Result<Vec<u8>, FrameExtractError> {
-    let mut stdout = child.stdout.take().unwrap();
+fn read_stdout_checked(child: &Arc<Mutex<Child>>, capacity: usize) -> Result<Vec<u8>, FrameExtractError> {
+    let mut stdout = child
+        .lock()
+        .expect("watchdog mutex poisoned")
+        .stdout
+        .take()
+        .expect("stdout piped at spawn");
     let mut raw = Vec::with_capacity(capacity);
     let mut buf = [0u8; 4096];
 
     loop {
-        if stop_flag.load(Ordering::Relaxed) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(FrameExtractError::Stopped);
-        }
         match stdout.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => raw.extend_from_slice(&buf[..n]),
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(FrameExtractError::Io(e));
-            }
+            Err(e) => return Err(FrameExtractError::Io(e)),
         }
     }
     drop(stdout);
 
+    let mut child = child.lock().expect("watchdog mutex poisoned");
     let status = child.wait()?;
     if !status.success() {
         let mut stderr = String::new();

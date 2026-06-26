@@ -42,7 +42,7 @@ pub struct SimilarityResult {
     pub path_a: PathBuf,
     pub path_b: PathBuf,
     pub kind: SimilarityKind,
-    /// Visual similarity score: 0.0 (different) – 1.0 (identical).
+    /// Visual similarity score: 0.0 (different) - 1.0 (identical).
     pub visual_score: f32,
 }
 
@@ -55,7 +55,7 @@ pub struct SimilarGroup {
 
 #[derive(Debug, Clone)]
 pub struct CompareConfig {
-    /// Hamming tolerance (0.0–1.0). Default: 0.30 (30% differing bits).
+    /// Hamming tolerance (0.0-1.0). Default: 0.30 (30% differing bits).
     pub tolerance: f32,
     /// Duration filter tolerance (±%). Default: 20%.
     pub duration_tolerance_pct: f64,
@@ -206,7 +206,7 @@ fn compare_pair_visual(a: &VideoSignature, b: &VideoSignature, cfg: &CompareConf
 }
 
 /// Compares audio fingerprints of two signatures using chromaprint segment matching.
-/// Returns similarity 0.0–1.0 or None.
+/// Returns similarity 0.0-1.0 or None.
 fn compare_audio(a: &VideoSignature, b: &VideoSignature, cfg: &CompareConfig) -> Option<f32> {
     let fp_a = a.audio_fingerprint.as_deref()?;
     let fp_b = b.audio_fingerprint.as_deref()?;
@@ -227,7 +227,7 @@ fn compare_audio(a: &VideoSignature, b: &VideoSignature, cfg: &CompareConfig) ->
         return Some(0.0);
     }
 
-    // Best segment score → normalize to 0.0–1.0 (lower chromaprint score = better match).
+    // Best segment score → normalize to 0.0-1.0 (lower chromaprint score = better match).
     let best = matching
         .iter()
         .map(|s| s.score)

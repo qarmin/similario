@@ -6,8 +6,8 @@ pub mod thumbnail;
 pub mod visual;
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 pub use compare::{CompareConfig, SimilarGroup, SimilarityKind, SimilarityResult};
@@ -59,7 +59,7 @@ pub fn compute_signatures<F>(
     paths: &[PathBuf],
     sig_config: &SignatureConfig,
     use_cache: bool,
-    stop_flag: &AtomicBool,
+    stop_flag: &Arc<AtomicBool>,
     progress: F,
 ) -> Vec<ScanOutcome>
 where

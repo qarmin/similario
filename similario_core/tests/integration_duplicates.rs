@@ -9,6 +9,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use similario_core::compare::{CompareConfig, find_similar};
@@ -48,7 +49,7 @@ fn test_all_variants_grouped_with_originals() {
         paths.len()
     );
 
-    let stop = AtomicBool::new(false);
+    let stop = Arc::new(AtomicBool::new(false));
     let sig_config = SignatureConfig::default();
 
     let outcomes = compute_signatures(&paths, &sig_config, false, &stop, |_, _| {});
