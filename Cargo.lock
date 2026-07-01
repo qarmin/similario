@@ -4556,6 +4556,7 @@ name = "similario_gui"
 version = "0.2.0"
 dependencies = [
  "chrono",
+ "fontique",
  "handsome_logger",
  "humansize",
  "log",
