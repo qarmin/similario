@@ -151,8 +151,8 @@ fn run_ffmpeg_seeked(
     timeout: FfmpegTimeout,
     stop_flag: &Arc<AtomicBool>,
 ) -> Result<Vec<u8>, FrameExtractError> {
-    let child = Command::new("ffmpeg")
-        .args(["-hide_banner", "-loglevel", "error", "-threads", "1"])
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(["-hide_banner", "-loglevel", "error", "-threads", "1"])
         // Fast seek BEFORE -i: jumps to nearest keyframe, near-instant.
         .arg("-ss")
         .arg(format!("{seek_secs:.3}"))
@@ -172,15 +172,15 @@ fn run_ffmpeg_seeked(
             "pipe:1",
         ])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                FrameExtractError::FfmpegNotFound
-            } else {
-                FrameExtractError::Io(e)
-            }
-        })?;
+        .stderr(Stdio::piped());
+    crate::process_utils::disable_windows_console_window(&mut cmd);
+    let child = cmd.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            FrameExtractError::FfmpegNotFound
+        } else {
+            FrameExtractError::Io(e)
+        }
+    })?;
 
     let timeout = timeout.for_duration(duration);
     let watched = watchdog::watch(child, timeout, stop_flag);

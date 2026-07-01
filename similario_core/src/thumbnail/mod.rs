@@ -10,17 +10,17 @@ use image::RgbImage;
 pub fn extract_thumbnail(path: &Path, timestamp_secs: f32, max_w: u32, max_h: u32) -> Result<RgbImage, String> {
     let vf = format!("scale='min({max_w},iw)':'min({max_h},ih)':force_original_aspect_ratio=decrease");
 
-    let output = Command::new("ffmpeg")
-        .args(["-hide_banner", "-loglevel", "error", "-threads", "1"])
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(["-hide_banner", "-loglevel", "error", "-threads", "1"])
         .arg("-ss")
         .arg(format!("{timestamp_secs:.3}"))
         .arg("-i")
         .arg(path)
         .arg("-vf")
         .arg(&vf)
-        .args(["-vframes", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1"])
-        .output()
-        .map_err(|e| format!("ffmpeg spawn: {e}"))?;
+        .args(["-vframes", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1"]);
+    crate::process_utils::disable_windows_console_window(&mut cmd);
+    let output = cmd.output().map_err(|e| format!("ffmpeg spawn: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

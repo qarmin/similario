@@ -38,26 +38,26 @@ pub struct VideoMetadata {
 impl VideoMetadata {
     /// Fetches video metadata via the ffprobe CLI.
     pub fn from_path(path: &Path) -> Result<Self, MetadataError> {
-        let output = Command::new("ffprobe")
-            .args([
-                "-v",
-                "error",
-                "-show_format",
-                "-show_streams",
-                "-select_streams",
-                "v:0",
-                "-print_format",
-                "json",
-            ])
-            .arg(path)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    MetadataError::FfprobeNotFound
-                } else {
-                    MetadataError::Io(e)
-                }
-            })?;
+        let mut cmd = Command::new("ffprobe");
+        cmd.args([
+            "-v",
+            "error",
+            "-show_format",
+            "-show_streams",
+            "-select_streams",
+            "v:0",
+            "-print_format",
+            "json",
+        ])
+        .arg(path);
+        crate::process_utils::disable_windows_console_window(&mut cmd);
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                MetadataError::FfprobeNotFound
+            } else {
+                MetadataError::Io(e)
+            }
+        })?;
 
         if !output.status.success() {
             return Err(MetadataError::FfprobeFailed {

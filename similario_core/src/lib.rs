@@ -2,6 +2,7 @@ pub mod audio;
 pub mod cache;
 pub mod compare;
 pub mod metadata;
+pub mod process_utils;
 pub mod thumbnail;
 pub mod visual;
 

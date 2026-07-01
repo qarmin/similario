@@ -1,6 +1,6 @@
 [package]
 name = "similario_core"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Rafał Mikrut <mikrutrafal@protonmail.com>"]
 edition = "2024"
 rust-version = "1.94.1"
